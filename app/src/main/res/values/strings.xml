@@ -1,3 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">MediaSweep</string>
+
+    <!-- Home -->
+    <string name="home_your_media">Your media</string>
+    <string name="home_review_candidates">Review candidates</string>
+    <string name="home_scan_now">Scan now</string>
+    <string name="home_candidates_total">Candidates</string>
+    <string name="home_status">Status</string>
+
+    <!-- Home states -->
+    <string name="state_loading">Loading…</string>
+    <string name="state_not_scanned_title">No scan yet</string>
+    <string name="state_not_scanned_body">Scan your library to see what is taking up space and what may be worth reviewing.</string>
+    <string name="state_scanning_title">Scanning your media</string>
+    <string name="state_scanning_body">Analysis runs entirely on this device.</string>
+    <string name="state_no_permission_title">Media access is required</string>
+    <string name="state_no_permission_body">Media access is required to scan your library.</string>
+    <string name="state_no_permission_action">Grant access</string>
+    <string name="state_open_settings">Open settings</string>
+    <string name="state_no_media_title">No photos or videos were found.</string>
+    <string name="state_no_media_body">Nothing to review right now.</string>
+    <string name="state_failed_title">Scan failed</string>
+    <string name="state_failed_body">The scan could not finish. Your media was not changed.</string>
+    <string name="state_stale_title">Results may be out of date</string>
+    <string name="state_stale_body">Your library changed since the last scan.</string>
+    <string name="state_partial_title">Scanning selected media</string>
+    <string name="state_partial_body">Showing results from available media.</string>
+
+    <!-- Categories -->
+    <string name="category_exact_duplicates">Exact duplicates</string>
+    <string name="category_near_duplicates">Near duplicates</string>
+    <string name="category_large_files">Large files</string>
+    <string name="category_screenshots">Screenshots</string>
+    <string name="category_old_media">Old media</string>
+    <string name="category_groups_count">%1$d groups</string>
+    <string name="category_items_count">%1$d items</string>
+
+    <!-- Generic -->
+    <string name="action_cancel">Cancel</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_back">Back</string>
+    <string name="action_select_all">Select all</string>
+    <string name="action_clear_selection">Clear</string>
+    <string name="empty_library_clean">Your library looks clean.</string>
+    <string name="empty_library_clean_body">No strong cleanup candidates were found.</string>
+
+    <!-- Candidates overview -->
+    <string name="candidates_title">Review candidates</string>
+    <string name="candidates_subtitle">Choose a category to review. Nothing is deleted automatically.</string>
+    <string name="candidates_empty_title">Your library looks clean.</string>
+    <string name="candidates_empty_body">No strong cleanup candidates were found.</string>
+
+    <!-- Category screen -->
+    <string name="category_reviewable">potentially reviewable</string>
+    <string name="category_empty_title">No candidates in this category.</string>
+    <string name="category_empty_body">Run a scan to refresh these results.</string>
+    <string name="sort_largest">Largest</string>
+    <string name="sort_newest">Newest</string>
+    <string name="sort_oldest">Oldest</string>
+    <string name="confidence_high">HIGH CONFIDENCE</string>
+    <string name="confidence_medium">MEDIUM CONFIDENCE</string>
+    <string name="confidence_low">LOW CONFIDENCE</string>
+
+    <!-- Group detail -->
+    <string name="group_not_found_title">This candidate no longer exists.</string>
+    <string name="group_not_found_body">Your library changed. Run a scan to refresh the results.</string>
+    <string name="group_selected_of">%1$d of %2$d selected</string>
+    <string name="group_review_action">Review</string>
+    <string name="group_review_disabled">Select items to review</string>
+    <string name="item_size_label">Size</string>
+
+    <!-- Review summary -->
+    <string name="review_title">Review</string>
+    <string name="review_about_to">You\'re about to review:</string>
+    <string name="review_photos">%1$d photos</string>
+    <string name="review_videos">%1$d videos</string>
+    <string name="review_total">Total:</string>
+    <string name="review_trash_explanation">The selected media will be moved to the system trash. Nothing is deleted permanently right away; you can restore items from the system trash until you empty it.</string>
+    <string name="review_move_to_trash">Move to Trash</string>
+    <string name="review_empty_title">Nothing is selected yet.</string>
+    <string name="review_empty_body">Select media from a category, then review it here.</string>
+    <string name="review_selection_summary">%1$d selected • %2$s</string>
+
+    <!-- Trash flow (specification §10, §11, §46) -->
+    <string name="trash_unsupported">System trash needs Android 11 or newer. MediaSweep will not delete media without the system confirmation, so nothing was changed.</string>
+    <string name="trash_waiting">Waiting for the Android system confirmation…</string>
+    <string name="trash_verifying">Checking what actually changed in MediaStore…</string>
+    <string name="trash_completed">Items moved to the system trash: %1$d</string>
+    <string name="trash_completed_unchanged">Items still in the library: %1$d</string>
+    <string name="trash_cancelled">Cancelled. Nothing was changed.</string>
+    <string name="trash_request_failed">The system confirmation could not be started. Nothing was changed.</string>
+    <string name="trash_verify_failed">Could not verify the result. Run a scan to refresh the library.</string>
+    <string name="trash_result_done">Done</string>
+
+    <!-- Scan screen (specification §18, §27, §45) -->
+    <string name="scan_title">Scan</string>
+    <string name="scan_found_title">Found:</string>
+    <string name="scan_found_none">No candidates found yet.</string>
+    <string name="scan_found_row">%1$s: %2$d</string>
+    <string name="scan_stopping">Stopping the scan…</string>
+    <string name="scan_cancelled_title">Scan cancelled</string>
+    <string name="scan_cancelled_body">The scan stopped safely. Nothing was marked as complete.</string>
+    <string name="scan_complete_title">Scan complete</string>
+    <string name="scan_scanned">Scanned %1$s items • %2$s</string>
+    <!-- Spoken form of the progress line: TalkBack reads this instead of "4,832 / 12,240". -->
+    <string name="scan_progress_a11y">%1$s of %2$s items scanned</string>
+    <string name="scan_again">Scan again</string>
 </resources>
