@@ -1,178 +1,67 @@
 # MediaSweep
 
-> **Your gallery is full. See what is worth reviewing before you delete anything.**
+**Find gallery cleanup candidates locally, review the evidence, and let Android confirm what goes to trash.**
 
-## The Problem
+A crowded gallery mixes exact copies, similar shots, screenshots and large recordings. Finding what is worth removing is tedious; automatically treating “similar” as “disposable” can remove a photo the user wanted to keep.
 
-Phones accumulate thousands of photos and videos. Finding the duplicates, the giant screen
-recordings, the year-old screenshots and the long-forgotten videos is tedious — and the
-moment you start deleting by hand, the risk of removing the wrong photo goes up. The
-useful work ("what could I clean up?") and the dangerous work ("delete this file") get
-mixed together.
+MediaSweep separates discovery from action. It groups media into five review categories—exact duplicates, visually similar images, screenshots, large files and old media—then lets the user compare and select items. A system trash request follows the review summary; the app re-queries MediaStore to establish what actually changed.
 
-## The Solution
+## Two kinds of similarity, two kinds of evidence
 
-MediaSweep scans the media library **locally** and groups useful cleanup candidates
-without uploading personal media anywhere.
+Exact-duplicate candidates are bucketed by metadata before streaming SHA-256 over their bytes. Image similarity uses reduced decoding and a 64-bit DCT perceptual hash, followed by Hamming-distance grouping with a BK-tree and union-find.
 
-One scan produces five review categories — exact duplicates, near-duplicate images,
-screenshots, large files and old media — each backed by real MediaStore figures. You
-review a group, select what you want to get rid of, and Android itself performs the
-deletion through its system trash confirmation. MediaSweep never deletes anything on its
-own.
+A near-duplicate cluster is a **review suggestion**, not proof that every member is interchangeable. Smaller clusters get an additional worst-pair distance check; clusters above 256 members skip that quadratic check and cannot receive high confidence. Videos participate in byte-level matching only.
 
-### Demo GIF
+Source: [exact analysis](app/src/main/java/com/noise/mediasweep/scanner/classification/ExactDuplicateAnalyzer.kt), [near analysis](app/src/main/java/com/noise/mediasweep/scanner/classification/NearDuplicateAnalyzer.kt). Decisions: [fingerprinting](docs/decisions/003-fingerprinting-strategy.md), [no video perceptual matching](docs/decisions/006-no-video-perceptual-matching.md).
 
-Captured in the final on-device verification run (single post-completion run,
-`MediaSweep.md` §0.1) and committed as `docs/media/demo.gif`. It shows the complete flow:
-grant access → scan with live progress → open a duplicate group → compare → select →
-review summary → system trash confirmation → refreshed summary.
-
-### Screenshots
-
-Also produced in that same on-device run (`docs/media/`), covering: the permission
-screen, home with storage summary, scanning screen, completed/partial/failed scan, each
-of the five categories, a candidate group detail, the review summary, the trash
-confirmation result, dark theme, and an error state.
-
-## Features
-
-* **Contextual media permission** — full access, Android 14+ *selected* (partial) access,
-  and denied, each with its own honest UI state.
-* **Real scan progress** — actual processed/total counters and candidates found; no
-  fabricated percentages, ever.
-* **Exact duplicates** — streaming SHA-256 over file bytes, grouped with size and reason.
-* **Near-duplicate images** — 64-bit perceptual hash (DCT pHash, plus dHash/aHash) with
-  BK-tree + union-find clustering and confidence levels. Videos are never perceptually
-  hashed (ADR 006).
-* **Screenshots, large files, old media** — cheap metadata classifiers with the real
-  sizes and counts.
-* **Group detail** — side-by-side rows with thumbnails, size, date and per-item
-  selection. No automatic "keeper" decision is ever made for you.
-* **Review summary + system trash** — one confirmation summary, then the Android system
-  dialog; on return the index is re-read from MediaStore instead of trusting the result.
-* **Cancellable, incremental scans** — cancel at any time; the next scan reuses the
-  fingerprints of unchanged media instead of re-reading files.
-* **Dark and light theme** (follows the system, Material You dynamic colour on Android
-  12+), scalable text, and accessibility semantics on progress and loading states.
-* **Fully offline** — no `INTERNET` permission, no account, no telemetry.
-
-## How it works
+## The scan and review pipeline
 
 ```text
-MediaStore query (streamed, batched)
-      ↓
-metadata index in Room (reconciled every run: added / changed / disappeared)
-      ↓
-cheap bucketing (size + mime + dimensions)          ← never declares duplicates
-      ↓
-streaming SHA-256            ← only inside a suspicious bucket
-reduced 128 px decode + pHash ← only for image candidates, only if not cached
-      ↓
-exact groups · near clusters · screenshot / large-file / old-media rows
-      ↓
-review → selection → MediaStore system trash request → re-read source of truth
+MediaStore metadata → reconcile Room index
+    ├─ suspicious exact buckets → streaming SHA-256
+    ├─ images outside exact groups → reduced decode + perceptual hash
+    └─ metadata rules → screenshots / large / old media
+        → candidate groups → compare → user selection
+        → Android trash confirmation → re-query actual MediaStore state
 ```
 
-Expensive work only ever runs for candidates, never for the whole library, and
-fingerprints of unchanged files are reused on later scans. The pipeline is cooperative
-with cancellation and records honest session states (`SCANNING → COMPLETE / PARTIAL /
-FAILED`, recovered to `STALE` after an interrupted run). Full detail:
-[docs/scanning-pipeline.md](docs/scanning-pipeline.md).
+Unchanged fingerprints are reused on later scans. Exact hashing uses an 8 KiB buffer; perceptual decoding targets a 128 px longest edge and processes images sequentially. The first scan may decode many images: perceptual analysis is not limited to exact-duplicate buckets. These are cost controls, not measured scan-time or memory results.
 
-## Architecture
+MediaStore remains authoritative; Room stores the reconciled index, fingerprints and candidates. One application-scoped controller owns a scan, so navigation does not start competing pipelines. See [architecture](docs/architecture.md), [scanning pipeline](docs/scanning-pipeline.md) and [performance trade-offs](docs/performance.md).
 
-Lightweight Clean Architecture with unidirectional data flow — no multi-module setup, no
-DI framework:
+## Completion, partial access and recovery
 
-| Layer | Contents |
-| --- | --- |
-| `domain/` | models, use cases, repository interfaces (no Android types) |
-| `data/` | repositories, scan controller/pipeline, MediaStore + Room implementations |
-| `scanner/` | pure scanner components: bucketing, hashing, EXIF orientation, grouping, classification |
-| `feature/` | Compose screens + ViewModels (`StateFlow` → immutable UI state) |
-| `core/` | database, permissions, DI (`AppContainer`), formatting |
+- Progress reports processed/total counters from real work.
+- Selected-media access produces partial results and is labelled accordingly.
+- Cancellation waits for cooperative cleanup before allowing a new scan.
+- After process interruption, persisted state becomes stale if earlier results exist, or not-scanned for a first attempt. The app does not resume at the interrupted position.
+- Trash reconciliation checks which requested IDs remain active rather than assuming a successful dialog removed every item. Cancelled or partially applied requests retain items still present.
 
-* **MediaStore is the source of truth**; Room is only an index/cache that is reconciled
-  after every scan and trash operation.
-* One application-scoped `ScanController` owns a run, so progress survives navigation.
-* Deletion is always the system trash flow — MediaSweep has no delete path of its own.
+See [trash reconciliation](app/src/main/java/com/noise/mediasweep/data/repository/MediaStoreTrashReconciler.kt). There is no automatic keeper selection, scheduled cleanup or direct deletion fallback.
 
-Docs: [architecture](docs/architecture.md) ·
-[scanning pipeline](docs/scanning-pipeline.md) ·
-[decisions (ADR 001–007)](docs/decisions/) ·
-[privacy](docs/privacy.md) · [performance](docs/performance.md)
+## Try it with a small media set
 
-## Privacy
+Build with the configured Android toolchain and install the debug APK:
 
-**Media analysis happens locally on the device.**
+```bash
+./gradlew assembleDebug
+adb install app/build/outputs/apk/debug/app-debug.apk
+```
 
-**Media is not uploaded to a server by MediaSweep.**
+Add a byte-identical copy, a few similar photos and a screenshot to a test library. Grant access, scan, inspect groups, select test items and review the system trash request. Rescan to check that the displayed inventory follows actual MediaStore state. Android 11+ is required for trash; Android 10 can review candidates but cannot use this action.
 
-**No account is required.**
+The previous README described a completed GIF/screenshot capture, but those assets are not present in the repository. A real scan result, group comparison and system-confirmation recording remain useful presentation evidence to collect.
 
-Concretely:
-
-* the manifest declares no `INTERNET` permission — the app cannot open a socket;
-* no analytics, crash reporting or logging of media data;
-* Android Auto Backup is disabled, so even the local index stays on the device;
-* deleting is user-confirmed in the Android system UI and never automatic.
-
-Full statement with verification steps: [docs/privacy.md](docs/privacy.md).
-
-## Performance
-
-* Cheap-first pipeline: metadata bucketing first, hashing only where it can pay off.
-* 8 KiB streaming hash buffer — a 2 GB video never becomes a 2 GB array.
-* Images are decoded once, subsampled to 128 px, for the perceptual hash.
-* Batched database writes (500 rows / 400 SQL parameters) and indexed queries.
-* Incremental scans read a lean fingerprint projection and skip re-hashing unchanged
-  media, so a repeat scan of an unchanged library reads no files at all.
-* Lists are keyed lazy columns; dates format with a lock-free formatter.
-
-Details and trade-offs: [docs/performance.md](docs/performance.md).
-
-## Testing
-
-Everything is verified host-side — no emulator or device is required:
+## Verification and constraints
 
 ```bash
 ./gradlew assembleDebug lintDebug testDebugUnitTest
 ```
 
-* **262 tests**, all on the JVM: pure unit tests (formatting, classification, grouping,
-  hashing, state machines), Robolectric tests for Room/permissions/session recovery, and
-  host-side Compose UI tests for every screen and state.
-* Compose tests run with Robolectric `LEGACY` graphics and a realistic 411×891 dp
-  viewport (`app/src/test/resources/robolectric.properties`) — documented in
-  [docs/architecture.md](docs/architecture.md) §10.
-* CI runs the same command on every push (`.github/workflows/ci.yml`).
-* Instrumented tests exist for the single post-completion device run only (project
-  constraint §0.1).
+Existing host tests cover hashes, grouping, index reuse, controller/session recovery, permissions, Room and Compose states using Robolectric where needed. The [CI workflow](.github/workflows/ci.yml) runs build, lint and unit checks. This documentation review did not rerun them or establish on-device performance.
 
-## Limitations
+Near matching can miss or over-group images; confidence labels are heuristics. Incremental reuse depends on metadata change detection. Access restrictions limit the visible library. Scans live in the app process; no background scheduler or checkpoint resume is implemented.
 
-* **Android 10 (API 29) has no system trash request** — MediaSweep reports
-  "cannot trash on Android 10" and deletes nothing, rather than falling back to a silent
-  delete that scoped storage would deny anyway.
-* **Videos are never perceptually matched** (ADR 006): exact duplicates still work for
-  videos via SHA-256, but visually similar clips are not grouped.
-* **Partial access means partial results** — with Android 14+ selected access the scan
-  honestly reports "Showing results from available media".
-* **No background scanning**: a run lives in the app process; if Android kills the app
-  mid-scan, the state recovers to *stale* and you simply start it again (ADR 007).
-* **No automatic cleanup, quotas or scheduling** — review-only by design (ADR 004).
-* Screenshots and the demo GIF are produced in the final on-device run (§0.1).
+Analysis runs locally, with no declared `INTERNET` permission, analytics integration or account. Auto Backup is disabled for the index. Explicit trash actions use Android's system UI. See [privacy](docs/privacy.md).
 
-## Roadmap
-
-* Resume a scan where it stopped instead of restarting (richer persisted progress).
-* Periodic/deferred scans via WorkManager once there is a real scheduling need.
-* Perceptual matching for short videos, HEIC/RAW coverage review.
-* More languages and locale-aware grouping.
-* Optional: storage trend history, duplicate-aware "keep the best shot" suggestions
-  (still user-confirmed).
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+MIT licensed: [LICENSE](LICENSE).

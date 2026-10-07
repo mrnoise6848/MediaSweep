@@ -1,8 +1,7 @@
 # MediaSweep — Performance
 
-How the app keeps a scan fast, bounded and responsive on a mid-range phone. Numbers below
-are design constants that exist in the code; measured on-device figures are produced in the
-single post-completion verification run (constraint §0.1) and are not guessed here.
+Implementation cost controls for scanning. Numbers below are code constants, not measured
+on-device performance. No device measurement report is included in this repository.
 
 ## 1. Cost model: cheap first, expensive only where it pays
 
@@ -11,13 +10,13 @@ MediaStore metadata read          O(items)        always
 cheap bucketing (size + mime + …) O(items)        always, in memory
 streaming SHA-256                 O(bytes of       only inside a bucket that already
                                   candidates)      looks duplicated
-reduced decode + perceptual hash  O(candidates)    images only, never videos
+reduced decode + perceptual hash  O(images)        images outside exact groups, never videos
 classification                    O(items)         plain arithmetic on metadata
 ```
 
-Nothing expensive ever runs over the whole library. Bucketing removes most files before a
-single byte is hashed — a library of 10 000 photos with 40 different sizes costs 40 hash
-runs, not 10 000.
+Exact bucketing skips singleton buckets; hash work depends on the number of members in
+non-singleton buckets, not the number of distinct sizes. Near-duplicate analysis separately
+decodes uncached images outside exact groups, so a first scan may inspect most images.
 
 ## 2. Bounded memory (specification §21)
 
@@ -30,7 +29,7 @@ runs, not 10 000.
 | Database writes | batches of **500** fingerprints, `IN` clauses chunked to **400** params | `FINGERPRINT_BATCH`, `MediaItemDao.IN_CHUNK` |
 | Progress/found counts | small immutable maps; state is confluently reduced | `ScanProgress` |
 
-Full-size images are never held in memory and never decoded twice.
+Decode targets limit bitmap size. This is not a measured peak-memory bound for the app.
 
 ## 3. Incremental scans (specification §20)
 
@@ -68,8 +67,8 @@ Indexes exist on the columns the queries filter or sort by:
 `fingerprints(algorithm, mediaId)`, `candidate_groups(type, confidence)`,
 `candidate_group_members(mediaId, groupId)`, `scan_sessions(startedAt)`.
 
-Room index scans are therefore index-backed; the scan never does a full table scan with
-post-filtering on a large column set.
+These indexes support the corresponding filters; query plans and collection-scale costs
+still need measurement. The pipeline also loads metadata for in-memory classification.
 
 ## 6. Deliberate trade-offs
 
@@ -77,7 +76,8 @@ post-filtering on a large column set.
   and grouping run in memory without per-item queries. At tens of thousands of items this
   is a few megabytes of short-lived objects, far cheaper than thousands of round-trips.
 * Near-duplicate comparison is BK-tree + union-find over bucket members instead of an
-  all-pairs comparison, so the cost grows with bucket size, not library size squared.
+  all-pairs comparison, reducing all-pairs search work. The additional diameter check is quadratic within clusters
+  of at most 256 members; larger clusters skip it and remain medium confidence.
 * Videos are never perceptually hashed (ADR 006) — the single biggest memory/CPU saving
   available.
 * One scan at a time (ADR 007) instead of parallel workers: predictable memory, no
@@ -89,5 +89,4 @@ post-filtering on a large column set.
   subsample selection (`sampleSizeFor`), grouping algorithms. They are correctness tests,
   not benchmarks.
 * **On-device measurements** (scan wall time on a real library, memory high-water mark,
-  main-thread jank) belong to the final verification run; results are recorded in the
-  final report rather than estimated here.
+  main-thread jank) belong to the final verification run; no such results are included here yet.
